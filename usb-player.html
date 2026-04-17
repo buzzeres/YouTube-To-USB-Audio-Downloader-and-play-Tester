@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>USB Audio Player Simulator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+  .player {
+    background: #16213e;
+    border-radius: 16px;
+    padding: 30px;
+    width: 420px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    border: 1px solid #0f3460;
+  }
+  h1 {
+    text-align: center;
+    font-size: 16px;
+    color: #e94560;
+    margin-bottom: 20px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .display {
+    background: #0a0a1a;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    min-height: 80px;
+    border: 1px solid #0f3460;
+  }
+  .track-num { color: #e94560; font-size: 12px; }
+  .track-name {
+    font-size: 14px;
+    margin: 6px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .time-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+  }
+  .progress-bar {
+    width: 100%;
+    height: 6px;
+    background: #0a0a1a;
+    border-radius: 3px;
+    margin: 12px 0;
+    cursor: pointer;
+  }
+  .progress-fill {
+    height: 100%;
+    background: #e94560;
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.3s;
+  }
+  .controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .btn {
+    background: none;
+    border: 2px solid #0f3460;
+    color: #eee;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  .btn:hover { border-color: #e94560; color: #e94560; }
+  .btn-sm { width: 42px; height: 42px; font-size: 16px; }
+  .btn-lg { width: 56px; height: 56px; font-size: 22px; }
+  .btn.active { background: #e94560; border-color: #e94560; color: #fff; }
+  .playlist {
+    max-height: 240px;
+    overflow-y: auto;
+    border-radius: 8px;
+  }
+  .playlist-item {
+    padding: 10px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.15s;
+  }
+  .playlist-item:hover { background: rgba(233,69,96,0.1); }
+  .playlist-item.active { background: rgba(233,69,96,0.2); color: #e94560; }
+  .playlist-item .idx { color: #555; font-size: 11px; min-width: 22px; }
+  .playlist-item .name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .drop-zone {
+    border: 2px dashed #0f3460;
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: #e94560;
+    background: rgba(233,69,96,0.05);
+  }
+  .drop-zone p { margin: 8px 0; }
+  .drop-zone .hint { font-size: 12px; color: #666; }
+  .loop-label { font-size: 11px; color: #888; text-align: center; margin-top: 6px; }
+  .volume-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: #888;
+  }
+  .volume-row input[type=range] {
+    width: 100px;
+    accent-color: #e94560;
+  }
+  .format-warn {
+    color: #ff9800;
+    font-size: 11px;
+    margin-left: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="player">
+  <h1>USB Audio Player</h1>
+
+  <div id="dropArea" class="drop-zone">
+    <p>Click to select your USB music folder</p>
+    <p class="hint">Reads MP3 files in alphabetical order, just like a real USB player</p>
+    <input type="file" id="fileInput" webkitdirectory multiple accept="audio/*" style="display:none">
+  </div>
+
+  <div id="playerUI" style="display:none">
+    <div class="display">
+      <div class="track-num" id="trackNum">TRACK 1 / 1</div>
+      <div class="track-name" id="trackName">-</div>
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="time-row">
+        <span id="curTime">0:00</span>
+        <span id="totalTime">0:00</span>
+      </div>
+    </div>
+
+    <div class="volume-row">
+      <span>Vol</span>
+      <input type="range" id="volume" min="0" max="100" value="80">
+      <span id="volVal">80%</span>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-sm" id="btnPrev" title="Previous">&#9198;</button>
+      <button class="btn btn-lg" id="btnPlay" title="Play/Pause">&#9654;</button>
+      <button class="btn btn-sm" id="btnNext" title="Next">&#9197;</button>
+      <button class="btn btn-sm" id="btnLoop" title="Loop Mode">&#128257;</button>
+    </div>
+    <div class="loop-label" id="loopLabel">Loop: All</div>
+
+    <div class="playlist" id="playlist"></div>
+  </div>
+</div>
+
+<audio id="audio"></audio>
+
+<script>
+const audio = document.getElementById('audio');
+const dropArea = document.getElementById('dropArea');
+const fileInput = document.getElementById('fileInput');
+const playerUI = document.getElementById('playerUI');
+const trackNum = document.getElementById('trackNum');
+const trackName = document.getElementById('trackName');
+const progressBar = document.getElementById('progressBar');
+const progressFill = document.getElementById('progressFill');
+const curTime = document.getElementById('curTime');
+const totalTime = document.getElementById('totalTime');
+const playlist = document.getElementById('playlist');
+const btnPlay = document.getElementById('btnPlay');
+const btnPrev = document.getElementById('btnPrev');
+const btnNext = document.getElementById('btnNext');
+const btnLoop = document.getElementById('btnLoop');
+const volumeSlider = document.getElementById('volume');
+const volVal = document.getElementById('volVal');
+const loopLabel = document.getElementById('loopLabel');
+
+let tracks = [];
+let currentIndex = 0;
+let loopMode = 'all'; // all, one, none
+
+// USB audio players typically only support these formats
+const SUPPORTED = ['.mp3', '.wav', '.wma'];
+
+function isSupported(name) {
+  const lower = name.toLowerCase();
+  return SUPPORTED.some(ext => lower.endsWith(ext));
+}
+
+// Sort alphabetically like a USB player would
+function sortTracks(files) {
+  return files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+}
+
+function loadFiles(fileList) {
+  tracks = [];
+  const allFiles = Array.from(fileList);
+  // Filter to audio files only, skip hidden/system files
+  const audioFiles = allFiles.filter(f => {
+    if (f.name.startsWith('.')) return false;
+    if (f.name === 'desktop.ini') return false;
+    return f.type.startsWith('audio/') || isSupported(f.name);
+  });
+
+  sortTracks(audioFiles);
+
+  audioFiles.forEach(f => {
+    const supported = isSupported(f.name);
+    tracks.push({ file: f, name: f.name, url: URL.createObjectURL(f), supported });
+  });
+
+  if (tracks.length === 0) {
+    alert('No audio files found. USB players typically only read MP3 files.');
+    return;
+  }
+
+  dropArea.style.display = 'none';
+  playerUI.style.display = 'block';
+  renderPlaylist();
+  currentIndex = 0;
+  loadTrack(0);
+}
+
+function renderPlaylist() {
+  playlist.innerHTML = '';
+  tracks.forEach((t, i) => {
+    const div = document.createElement('div');
+    div.className = 'playlist-item' + (i === currentIndex ? ' active' : '');
+    const warn = t.supported ? '' : '<span class="format-warn">(unsupported format)</span>';
+    div.innerHTML = '<span class="idx">' + (i + 1) + '</span><span class="name">' + t.name + '</span>' + warn;
+    div.onclick = () => { currentIndex = i; loadTrack(i); audio.play(); updatePlayBtn(true); };
+    playlist.appendChild(div);
+  });
+}
+
+function loadTrack(i) {
+  const track = tracks[i];
+  audio.src = track.url;
+  trackNum.textContent = 'TRACK ' + (i + 1) + ' / ' + tracks.length;
+  trackName.textContent = track.name.replace(/\.[^.]+$/, '');
+  renderPlaylist();
+}
+
+function formatTime(s) {
+  if (isNaN(s)) return '0:00';
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return m + ':' + String(sec).padStart(2, '0');
+}
+
+function updatePlayBtn(playing) {
+  btnPlay.innerHTML = playing ? '&#9646;&#9646;' : '&#9654;';
+}
+
+// Controls
+btnPlay.onclick = () => {
+  if (audio.paused) { audio.play(); updatePlayBtn(true); }
+  else { audio.pause(); updatePlayBtn(false); }
+};
+
+btnNext.onclick = () => {
+  currentIndex = (currentIndex + 1) % tracks.length;
+  loadTrack(currentIndex);
+  audio.play();
+  updatePlayBtn(true);
+};
+
+btnPrev.onclick = () => {
+  if (audio.currentTime > 3) {
+    audio.currentTime = 0;
+  } else {
+    currentIndex = (currentIndex - 1 + tracks.length) % tracks.length;
+    loadTrack(currentIndex);
+  }
+  audio.play();
+  updatePlayBtn(true);
+};
+
+btnLoop.onclick = () => {
+  if (loopMode === 'all') { loopMode = 'one'; btnLoop.classList.add('active'); }
+  else if (loopMode === 'one') { loopMode = 'none'; btnLoop.classList.remove('active'); }
+  else { loopMode = 'all'; }
+  loopLabel.textContent = 'Loop: ' + loopMode.charAt(0).toUpperCase() + loopMode.slice(1);
+};
+
+volumeSlider.oninput = () => {
+  audio.volume = volumeSlider.value / 100;
+  volVal.textContent = volumeSlider.value + '%';
+};
+audio.volume = 0.8;
+
+// Progress
+audio.ontimeupdate = () => {
+  if (audio.duration) {
+    progressFill.style.width = (audio.currentTime / audio.duration * 100) + '%';
+    curTime.textContent = formatTime(audio.currentTime);
+    totalTime.textContent = formatTime(audio.duration);
+  }
+};
+
+progressBar.onclick = (e) => {
+  if (audio.duration) {
+    const rect = progressBar.getBoundingClientRect();
+    audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
+  }
+};
+
+// Auto-advance like a real USB player
+audio.onended = () => {
+  if (loopMode === 'one') {
+    audio.currentTime = 0;
+    audio.play();
+  } else if (loopMode === 'all') {
+    currentIndex = (currentIndex + 1) % tracks.length;
+    loadTrack(currentIndex);
+    audio.play();
+  } else {
+    if (currentIndex < tracks.length - 1) {
+      currentIndex++;
+      loadTrack(currentIndex);
+      audio.play();
+    } else {
+      updatePlayBtn(false);
+    }
+  }
+};
+
+// Click to select folder
+dropArea.onclick = () => fileInput.click();
+fileInput.onchange = (e) => loadFiles(e.target.files);
+
+// Drag and drop
+dropArea.ondragover = (e) => { e.preventDefault(); dropArea.classList.add('drag-over'); };
+dropArea.ondragleave = () => dropArea.classList.remove('drag-over');
+dropArea.ondrop = (e) => {
+  e.preventDefault();
+  dropArea.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) loadFiles(e.dataTransfer.files);
+};
+
+// Keyboard shortcuts (like physical buttons)
+document.onkeydown = (e) => {
+  if (e.code === 'Space') { e.preventDefault(); btnPlay.click(); }
+  if (e.code === 'ArrowRight') btnNext.click();
+  if (e.code === 'ArrowLeft') btnPrev.click();
+};
+</script>
+
+</body>
+</html>
